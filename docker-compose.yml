@@ -1,0 +1,67 @@
+version: '3'
+
+services:
+  phpApache:
+    image: php:8-apache
+   # user: www-data
+    volumes:
+      - ./:/var/www/html/
+      - ./sites-available:/etc/apache2/sites-available/
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - mynetwork
+    command: >
+      sh -c "a2enmod proxy && a2enmod proxy_http && /usr/sbin/apache2ctl -DFOREGROUND"
+    #command: apt-get update && apt-get install -y \zlib1g-dev \libzip-dev \unzip docker-php-ext-install zip \ docker-php-ext-install mysqli pdo pdo_mysql && docker-php-ext-enable pdo_mysql a2enmod rewrite
+  
+  db:
+    # We use a mariadb image which supports both amd64 & arm64 architecture
+    image: mariadb:10-focal
+    # If you really want to use MySQL, uncomment the following line
+    #image: mysql:8
+    command: '--default-authentication-plugin=mysql_native_password'
+    restart: always
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 --password="$$(cat /run/secrets/db-password)" --silent']
+      interval: 3s
+      retries: 5
+      start_period: 30s
+    secrets:
+      - db-password
+    volumes:
+      - db-data:/var/lib/mysql
+    environment:
+      - MYSQL_DATABASE=example
+      - MYSQL_ROOT_PASSWORD_FILE=/run/secrets/db-password
+    ports:
+      # <Port exposed> : < MySQL Port running inside container>
+      - '3306:3306'
+    networks:
+      - mynetwork
+      
+  portainer:
+    image: portainer/portainer-ee:alpine
+    container_name: portainer
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "9000:9000"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "portainer_data:/data"
+    restart: always
+    networks:
+      - mynetwork
+
+volumes:
+  portainer_data:
+  db-data:
+
+secrets:
+  db-password:
+    file: db/password.txt
+    
+networks:
+  mynetwork:
+    driver: bridge
